@@ -38,13 +38,42 @@ func (sh *shield) Forget(class string, text string) error {
 }
 
 func (sh *shield) Classify(text string) (c string, err error) {
-	m, err := sh.score(text)
+	totalCounts, err := sh.store.TotalClassWordCounts()
 	if err != nil {
 		return
 	}
+
+	// Compute priors
+	var sum int64
+	for _, v := range totalCounts {
+		sum += v
+	}
+	priors := make(map[string]float64)
+	for k, v := range totalCounts {
+		priors[k] = float64(v) / float64(sum)
+	}
+
+	// Compute score
+	tokens := sh.tokenizer.Tokenize(text)
+	scores := make(map[string]float64)
+	for class, v := range priors {
+		score := math.Log(v)
+		for word, _ := range tokens {
+			cwc, cerr := sh.store.ClassWordCount(class, word)
+			fcwc := float64(cwc)
+			if cwc == 0 || cerr != nil {
+				fcwc = defaultProb
+			}
+			prob := fcwc / float64(totalCounts[class])
+			score += math.Log(prob)
+		}
+		scores[class] = score
+	}
+
+	// Select class with highes prob
 	var k string = ""
 	var i float64
-	for k2, v2 := range m {
+	for k2, v2 := range scores {
 		if i == 0 || v2 > i {
 			k, i = k2, v2
 		}
@@ -55,34 +84,4 @@ func (sh *shield) Classify(text string) (c string, err error) {
 
 func (sh *shield) Reset() error {
 	return nil // TODO: implement
-}
-
-func (sh *shield) score(text string) (m map[string]float64, err error) {
-	classes, err := sh.store.Classes()
-	if err != nil {
-		return
-	}
-	totalCounts, err := sh.store.TotalClassWordCounts()
-	if err != nil {
-		return
-	}
-
-	m = make(map[string]float64)
-	grouped := sh.tokenizer.Tokenize(text)
-	for _, class := range classes {
-		wordCount := totalCounts[class]
-		if wordCount == 0 {
-			continue
-		}
-		m[class] = 0.0
-		for word, _ := range grouped {
-			c, err := sh.store.ClassWordCount(class, word)
-			score := float64(c)
-			if c == 0 || err != nil {
-				score = defaultProb
-			}
-			m[class] += math.Log(score / float64(wordCount))
-		}
-	}
-	return
 }
