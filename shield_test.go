@@ -4,8 +4,6 @@ import (
 	"testing"
 )
 
-var redis = "127.0.0.1:6379"
-
 func TestLearn(t *testing.T) {
 	store := NewRedisStore("127.0.0.1:6379", "", 0)
 	tokenizer := NewEnglishTokenizer()
