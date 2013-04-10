@@ -10,7 +10,7 @@ func NewEnglishTokenizer() Tokenizer {
 	return &enTokenizer{}
 }
 
-func (t *enTokenizer) Tokenize(text string) (words []string) {
+func (t *enTokenizer) Tokenize(text string) (words map[string]int64) {
 	unfiltered := enTokenRx.FindAllString(text, -1)
 	contains := func(a []string, s string) bool {
 		for _, v := range a {
@@ -20,9 +20,10 @@ func (t *enTokenizer) Tokenize(text string) (words []string) {
 		}
 		return false
 	}
+	words = make(map[string]int64)
 	for _, w := range unfiltered {
 		if !contains(stopWords, w) {
-			words = append(words, w)
+			words[w]++
 		}
 	}
 	return

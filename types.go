@@ -1,7 +1,7 @@
 package shield
 
 type Tokenizer interface {
-	Tokenize(text string) (words []string)
+	Tokenize(text string) (words map[string]int64)
 }
 
 type Shield interface {

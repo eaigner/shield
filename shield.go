@@ -25,7 +25,7 @@ func (sh *shield) Learn(class string, text string) (err error) {
 	if err = sh.store.AddClass(class); err != nil {
 		return
 	}
-	for word, count := range group(sh.tokenizer.Tokenize(text)) {
+	for word, count := range sh.tokenizer.Tokenize(text) {
 		if err = sh.store.IncrementClassWordCount(class, word, count); err != nil {
 			return
 		}
@@ -68,7 +68,7 @@ func (sh *shield) score(text string) (m map[string]float64, err error) {
 	}
 
 	m = make(map[string]float64)
-	grouped := group(sh.tokenizer.Tokenize(text))
+	grouped := sh.tokenizer.Tokenize(text)
 	for _, class := range classes {
 		wordCount := totalCounts[class]
 		if wordCount == 0 {
@@ -85,12 +85,4 @@ func (sh *shield) score(text string) (m map[string]float64, err error) {
 		}
 	}
 	return
-}
-
-func group(words []string) map[string]int64 {
-	m := make(map[string]int64)
-	for _, w := range words {
-		m[w]++
-	}
-	return m
 }
