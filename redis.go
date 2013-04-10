@@ -7,7 +7,6 @@ import (
 
 type RedisStore struct {
 	client     *goredis.Client
-	rootKey    string
 	sumKey     string
 	classKey   string
 	classesKey string
@@ -20,7 +19,6 @@ func NewRedisStore(addr, password string, db int) Store {
 			Db:       db,
 			Password: password,
 		},
-		rootKey:    "shield",
 		sumKey:     "shield:sum",
 		classKey:   "shield:class",
 		classesKey: "shield:classes",
