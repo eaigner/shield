@@ -1,17 +1,16 @@
 package shield
 
 import (
-	"github.com/eaigner/goredis"
 	"testing"
 )
 
 var redis = "127.0.0.1:6379"
 
 func TestLearn(t *testing.T) {
-	var client goredis.Client
-	client.Addr = "127.0.0.1:6379"
+	store := NewRedisStore("127.0.0.1:6379", "", 0)
+	tokenizer := NewEnglishTokenizer()
+	sh := New(tokenizer, store)
 
-	sh := New(&client, NewEnglishTokenizer())
 	sh.Learn("good", "sunshine drugs love sex lobster sloth")
 	sh.Learn("bad", "fear death horror government zombie god")
 
