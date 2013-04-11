@@ -3,6 +3,8 @@ package shield
 import (
 	"fmt"
 	"io/ioutil"
+	"log"
+	"os"
 	"strings"
 	"testing"
 )
@@ -36,7 +38,8 @@ func TestLearn(t *testing.T) {
 	testData := readDataSet("testdata.txt", "testlabels.txt", t)
 	trainData := readDataSet("traindata.txt", "trainlabels.txt", t)
 
-	store := NewRedisStore("127.0.0.1:6379", "")
+	logger := log.New(os.Stderr, "", log.LstdFlags)
+	store := NewRedisStore("127.0.0.1:6379", "", logger, "redis")
 	tokenizer := NewEnglishTokenizer()
 
 	sh := New(tokenizer, store)
@@ -44,13 +47,19 @@ func TestLearn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer sh.Reset()
+	// defer sh.Reset()
 
 	// Run on test sets
+	sets := []Set{}
 	for _, v := range trainData {
 		c := strings.SplitN(v, " ", 2)
-		sh.Learn(c[0], c[1])
+		sets = append(sets, Set{
+			Class: c[0],
+			Text:  c[1],
+		})
 	}
+
+	sh.BulkLearn(sets)
 
 	var hit, miss int
 	for _, v2 := range testData {
@@ -58,7 +67,7 @@ func TestLearn(t *testing.T) {
 		k, v := c[0], c[1]
 		clz, err := sh.Classify(v)
 		if err != nil {
-			t.Fatal(err, k, v)
+			t.Fatal(err, "key:", k, "value:", v)
 		}
 		if clz != k {
 			miss++

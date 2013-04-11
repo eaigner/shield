@@ -18,23 +18,39 @@ func New(t Tokenizer, s Store) Shield {
 	}
 }
 
-func (sh *shield) Learn(class string, text string) (err error) {
-	if class == "" {
-		panic("no class specified")
+func (sh *shield) Learn(class, text string) (err error) {
+	if len(class) == 0 {
+		panic("invalid class")
 	}
-	if err = sh.store.AddClass(class); err != nil {
-		return
+	if len(text) == 0 {
+		panic("invalid text")
 	}
-	wordMap := map[string]int64{}
-	for word, count := range sh.tokenizer.Tokenize(text) {
-		wordMap[word] += count
-	}
-	return sh.store.IncrementClassWordCounts(map[string]map[string]int64{
-		class: wordMap,
-	})
+	return sh.BulkLearn([]Set{Set{Class: class, Text: text}})
 }
 
-func (sh *shield) Forget(class string, text string) error {
+func (sh *shield) BulkLearn(sets []Set) (err error) {
+	if len(sets) == 0 {
+		panic("invalid data set")
+	}
+	m := make(map[string]map[string]int64)
+	for _, set := range sets {
+		if w, ok := m[set.Class]; ok {
+			for word, count := range sh.tokenizer.Tokenize(set.Text) {
+				w[word] += count
+			}
+		} else {
+			m[set.Class] = sh.tokenizer.Tokenize(set.Text)
+		}
+	}
+	for class, _ := range m {
+		if err = sh.store.AddClass(class); err != nil {
+			return
+		}
+	}
+	return sh.store.IncrementClassWordCounts(m)
+}
+
+func (sh *shield) Forget(class, text string) (err error) {
 	return nil // TODO: implement
 }
 
@@ -50,18 +66,35 @@ func (sh *shield) Classify(text string) (c string, err error) {
 		sum += v
 	}
 	priors := make(map[string]float64)
+	classes := make([]string, 0, len(totalCounts))
 	for class, count := range totalCounts {
+		classes = append(classes, class)
 		priors[class] = float64(count) / float64(sum)
 	}
 
-	// Compute score
+	// Get class word counts in bulk
 	tokens := sh.tokenizer.Tokenize(text)
+	words := make([]string, 0, len(tokens))
+	for word, _ := range tokens {
+		words = append(words, word)
+	}
+
+	classWordCounts := make(map[string]map[string]int64)
+	for _, class := range classes {
+		wc, err2 := sh.store.ClassWordCounts(class, words)
+		if err2 != nil {
+			err = err2
+			return
+		}
+		classWordCounts[class] = wc
+	}
+
+	// Compute score
 	scores := make(map[string]float64)
 	for class, v := range priors {
 		score := math.Log(v)
-		for word, _ := range tokens {
-			cwc, _ := sh.store.ClassWordCount(class, word)
-			score += math.Log((float64(cwc) + defaultProb) / float64(totalCounts[class]))
+		for _, count := range classWordCounts[class] {
+			score += math.Log((float64(count) + defaultProb) / float64(totalCounts[class]))
 		}
 		scores[class] = score
 	}
@@ -76,6 +109,10 @@ func (sh *shield) Classify(text string) (c string, err error) {
 	}
 	c = k
 	return
+}
+
+func (sh *shield) BulkClassify(texts []string) (c []string, err error) {
+	panic("TODO: impl!")
 }
 
 func (sh *shield) Reset() error {

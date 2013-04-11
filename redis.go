@@ -2,8 +2,7 @@ package shield
 
 import (
 	"github.com/garyburd/redigo/redis"
-	"strconv"
-	"time"
+	"log"
 )
 
 type RedisStore struct {
@@ -13,23 +12,30 @@ type RedisStore struct {
 	sumKey     string
 	classKey   string
 	classesKey string
+	logger     *log.Logger
+	prefix     string
 }
 
-func NewRedisStore(addr, password string) Store {
+func NewRedisStore(addr, password string, logger *log.Logger, prefix string) Store {
 	return &RedisStore{
 		addr:       addr,
 		password:   password,
 		sumKey:     "shield:sum",
 		classKey:   "shield:class",
 		classesKey: "shield:classes",
+		logger:     logger,
+		prefix:     prefix,
 	}
 }
 
 func (rs *RedisStore) conn() (conn redis.Conn, err error) {
 	if rs.redis == nil {
-		c, err2 := redis.DialTimeout("tcp", rs.addr, 0, 1*time.Second, 1*time.Second)
+		c, err2 := redis.Dial("tcp", rs.addr)
 		if err2 != nil {
 			return nil, err2
+		}
+		if rs.logger != nil {
+			c = redis.NewLoggingConn(c, rs.logger, rs.prefix)
 		}
 		if rs.password != "" {
 			_, authErr := redis.String(c.Do("AUTH", rs.password))
@@ -66,20 +72,46 @@ func (rs *RedisStore) AddClass(class string) (err error) {
 	if class == "" {
 		panic("invalid class: " + class)
 	}
-	_, err = c.Do("SADD", rs.classesKey, []byte(class))
+	_, err = c.Do("SADD", rs.classesKey, class)
 	return err
 }
 
-func (rs *RedisStore) ClassWordCount(class, word string) (i int64, err error) {
+func (rs *RedisStore) ClassWordCounts(class string, words []string) (mc map[string]int64, err error) {
 	c, err := rs.conn()
 	if err != nil {
 		return
 	}
-	b, err := redis.Bytes(c.Do("HGET", rs.classKey+":"+class, word))
+	c.Send("MULTI")
+	key := rs.classKey + ":" + class
+	args := make([]interface{}, 0, len(words)+1)
+	args = append(args, key)
+	for _, v := range words {
+		args = append(args, v)
+	}
+	c.Send("HMGET", args...)
+	values, err := redis.Values(c.Do("EXEC"))
 	if err != nil {
 		return
 	}
-	i, err = strconv.ParseInt(string(b), 10, 64)
+
+	if len(values) > 0 {
+		if x, ok := values[0].([]interface{}); ok {
+			values = x
+		}
+	}
+
+	var i int64
+
+	mc = make(map[string]int64)
+	for len(values) > 0 {
+		var count int64
+		values, err = redis.Scan(values, &count)
+		if err != nil {
+			return
+		}
+		mc[words[i]] = count
+		i++
+	}
 	return
 }
 
@@ -95,12 +127,7 @@ func (rs *RedisStore) IncrementClassWordCounts(m map[string]map[string]int64) (e
 			c.Send("HINCRBY", rs.sumKey, class, count)
 		}
 	}
-	c.Send("EXEC")
-	err = c.Flush()
-	if err != nil {
-		return
-	}
-	_, err = c.Receive()
+	_, err = c.Do("EXEC")
 	return
 }
 
@@ -139,11 +166,6 @@ func (rs *RedisStore) Reset() (err error) {
 	for _, key := range a {
 		c.Send("DEL", key)
 	}
-	c.Send("EXEC")
-	err = c.Flush()
-	if err != nil {
-		return
-	}
-	_, err = c.Receive()
+	_, err = c.Do("EXEC")
 	return
 }

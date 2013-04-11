@@ -26,4 +26,4 @@ func (t *enTokenizer) Tokenize(text string) (words map[string]int64) {
 //
 // http://wiki.apache.org/spamassassin/BayesStopList
 //
-var splitTokenRx = regexp.MustCompile(`\s+|able|all|already|and|any|are|because|both|can|come|each|email|even|few|first|for|from|give|has|have|http|information|into|it's|just|know|like|long|look|made|mail|mailing|mailto|make|many|more|most|much|need|not|now|number|off|one|only|out|own|people|place|right|same|see|such|that|the|this|through|time|using|web|where|why|with|without|work|world|year|years|you|you're|your`)
+var splitTokenRx = regexp.MustCompile(`[^\w]+|able|all|already|and|any|are|because|both|can|come|each|email|even|few|first|for|from|give|has|have|http|information|into|it's|just|know|like|long|look|made|mail|mailing|mailto|make|many|more|most|much|need|not|now|number|off|one|only|out|own|people|place|right|same|see|such|that|the|this|through|time|using|web|where|why|with|without|work|world|year|years|you|you're|your`)
