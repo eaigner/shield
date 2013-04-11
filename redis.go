@@ -86,5 +86,31 @@ func (rs *RedisStore) TotalClassWordCounts() (m map[string]int64, err error) {
 }
 
 func (rs *RedisStore) Reset() (err error) {
-	return nil // TODO: impl
+	tx, err := rs.client.Transaction()
+	if err != nil {
+		return
+	}
+	err = tx.Multi()
+	if err != nil {
+		return
+	}
+	defer func() {
+		if err != nil {
+			tx.Discard()
+		} else {
+			_, err = tx.Exec()
+		}
+	}()
+	a, err := tx.Keys("shield:*")
+	if err != nil {
+		return
+	}
+	for _, key := range a {
+		_, err2 := tx.Del(key)
+		if err2 != nil {
+			err = err2
+			return
+		}
+	}
+	return
 }
