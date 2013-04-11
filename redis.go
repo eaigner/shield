@@ -31,6 +31,13 @@ func (rs *RedisStore) conn() (conn redis.Conn, err error) {
 		if err2 != nil {
 			return nil, err2
 		}
+		if rs.password != "" {
+			_, authErr := redis.String(c.Do("AUTH", rs.password))
+			if authErr != nil {
+				err = authErr
+				return
+			}
+		}
 		rs.redis = c
 	}
 	return rs.redis, nil
