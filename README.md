@@ -10,6 +10,10 @@ Currently implemented:
 ```go
 package main
 
+import (
+  "github.com/eaigner/shield"
+)
+
 func main() {
   sh := shield.New(
     shield.NewEnglishTokenizer(),
