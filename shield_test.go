@@ -68,8 +68,9 @@ func TestLearn(t *testing.T) {
 
 	// Test hit/miss ratio
 	// TODO: Tweak this, where possible
-	y := (float64(hit) / float64(hit+miss))
-	if x := 0.73; y < x {
-		t.Fatalf("%d hits, %d misses (expected ratio %.2f, is %.2f)", hit, miss, x, y)
+	minHitRatio := 0.73
+	hitRatio := (float64(hit) / float64(hit+miss))
+	if hitRatio < minHitRatio {
+		t.Fatalf("%d hits, %d misses (expected ratio %.2f, is %.2f)", hit, miss, minHitRatio, hitRatio)
 	}
 }
