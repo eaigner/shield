@@ -15,9 +15,8 @@ func NewEnglishTokenizer() Tokenizer {
 func (t *enTokenizer) Tokenize(text string) (words map[string]int64) {
 	words = make(map[string]int64)
 	for _, w := range splitTokenRx.Split(text, -1) {
-		wl := strings.ToLower(w)
-		if len(wl) > 2 {
-			words[wl]++
+		if len(w) > 2 {
+			words[strings.ToLower(w)]++
 		}
 	}
 	return
