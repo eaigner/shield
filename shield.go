@@ -25,12 +25,13 @@ func (sh *shield) Learn(class string, text string) (err error) {
 	if err = sh.store.AddClass(class); err != nil {
 		return
 	}
+	wordMap := map[string]int64{}
 	for word, count := range sh.tokenizer.Tokenize(text) {
-		if err = sh.store.IncrementClassWordCount(class, word, count); err != nil {
-			return
-		}
+		wordMap[word] += count
 	}
-	return
+	return sh.store.IncrementClassWordCounts(map[string]map[string]int64{
+		class: wordMap,
+	})
 }
 
 func (sh *shield) Forget(class string, text string) error {

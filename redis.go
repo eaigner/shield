@@ -83,15 +83,24 @@ func (rs *RedisStore) ClassWordCount(class, word string) (i int64, err error) {
 	return
 }
 
-func (rs *RedisStore) IncrementClassWordCount(class, word string, i int64) (err error) {
+func (rs *RedisStore) IncrementClassWordCounts(m map[string]map[string]int64) (err error) {
 	c, err := rs.conn()
 	if err != nil {
 		return
 	}
 	c.Send("MULTI")
-	c.Send("HINCRBY", rs.classKey+":"+class, word, i)
-	c.Send("HINCRBY", rs.sumKey, class, i)
-	_, err = c.Do("EXEC")
+	for class, words := range m {
+		for word, count := range words {
+			c.Send("HINCRBY", rs.classKey+":"+class, word, count)
+			c.Send("HINCRBY", rs.sumKey, class, count)
+		}
+	}
+	c.Send("EXEC")
+	err = c.Flush()
+	if err != nil {
+		return
+	}
+	_, err = c.Receive()
 	return
 }
 
@@ -130,6 +139,11 @@ func (rs *RedisStore) Reset() (err error) {
 	for _, key := range a {
 		c.Send("DEL", key)
 	}
-	_, err = c.Do("EXEC")
+	c.Send("EXEC")
+	err = c.Flush()
+	if err != nil {
+		return
+	}
+	_, err = c.Receive()
 	return
 }
