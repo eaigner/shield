@@ -49,8 +49,8 @@ func (sh *shield) Classify(text string) (c string, err error) {
 		sum += v
 	}
 	priors := make(map[string]float64)
-	for k, v := range totalCounts {
-		priors[k] = float64(v) / float64(sum)
+	for class, count := range totalCounts {
+		priors[class] = float64(count) / float64(sum)
 	}
 
 	// Compute score
@@ -59,13 +59,8 @@ func (sh *shield) Classify(text string) (c string, err error) {
 	for class, v := range priors {
 		score := math.Log(v)
 		for word, _ := range tokens {
-			cwc, cerr := sh.store.ClassWordCount(class, word)
-			fcwc := float64(cwc)
-			if cwc == 0 || cerr != nil {
-				fcwc = defaultProb
-			}
-			prob := fcwc / float64(totalCounts[class])
-			score += math.Log(prob)
+			cwc, _ := sh.store.ClassWordCount(class, word)
+			score += math.Log((float64(cwc) + defaultProb) / float64(totalCounts[class]))
 		}
 		scores[class] = score
 	}
@@ -83,5 +78,5 @@ func (sh *shield) Classify(text string) (c string, err error) {
 }
 
 func (sh *shield) Reset() error {
-	return nil // TODO: implement
+	return sh.store.Reset()
 }

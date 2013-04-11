@@ -58,6 +58,10 @@ func (rs *RedisStore) IncrementClassWordCount(class, word string, i int64) (err 
 	if err != nil {
 		return
 	}
+	err = tx.Multi()
+	if err != nil {
+		return
+	}
 	defer func() {
 		if err != nil {
 			tx.Discard()
@@ -79,4 +83,8 @@ func (rs *RedisStore) TotalClassWordCounts() (m map[string]int64, err error) {
 		m = v
 	}
 	return
+}
+
+func (rs *RedisStore) Reset() (err error) {
+	return nil // TODO: impl
 }
