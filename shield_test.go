@@ -36,7 +36,7 @@ func TestLearn(t *testing.T) {
 	testData := readDataSet("testdata.txt", "testlabels.txt", t)
 	trainData := readDataSet("traindata.txt", "trainlabels.txt", t)
 
-	store := NewRedisStore("127.0.0.1:6379", "", 0)
+	store := NewRedisStore("127.0.0.1:6379", "")
 	tokenizer := NewEnglishTokenizer()
 
 	sh := New(tokenizer, store)

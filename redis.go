@@ -1,32 +1,47 @@
 package shield
 
 import (
-	"github.com/eaigner/goredis"
+	"github.com/garyburd/redigo/redis"
 	"strconv"
+	"time"
 )
 
 type RedisStore struct {
-	client     *goredis.Client
+	redis      redis.Conn
+	addr       string
+	password   string
 	sumKey     string
 	classKey   string
 	classesKey string
 }
 
-func NewRedisStore(addr, password string, db int) Store {
+func NewRedisStore(addr, password string) Store {
 	return &RedisStore{
-		client: &goredis.Client{
-			Addr:     addr,
-			Db:       db,
-			Password: password,
-		},
+		addr:       addr,
+		password:   password,
 		sumKey:     "shield:sum",
 		classKey:   "shield:class",
 		classesKey: "shield:classes",
 	}
 }
 
+func (rs *RedisStore) conn() (conn redis.Conn, err error) {
+	if rs.redis == nil {
+		c, err2 := redis.DialTimeout("tcp", rs.addr, 0, 1*time.Second, 1*time.Second)
+		if err2 != nil {
+			return nil, err2
+		}
+		rs.redis = c
+	}
+	return rs.redis, nil
+}
+
 func (rs *RedisStore) Classes() (a []string, err error) {
-	classes, err := rs.client.Smembers(rs.classesKey)
+	c, err := rs.conn()
+	if err != nil {
+		return
+	}
+	classes, err := redis.Strings(c.Do("SMEMBERS", rs.classesKey))
 	if err != nil {
 		return
 	}
@@ -36,16 +51,24 @@ func (rs *RedisStore) Classes() (a []string, err error) {
 	return
 }
 
-func (rs *RedisStore) AddClass(class string) error {
+func (rs *RedisStore) AddClass(class string) (err error) {
+	c, err := rs.conn()
+	if err != nil {
+		return
+	}
 	if class == "" {
 		panic("invalid class: " + class)
 	}
-	_, err := rs.client.Sadd(rs.classesKey, []byte(class))
+	_, err = c.Do("SADD", rs.classesKey, []byte(class))
 	return err
 }
 
 func (rs *RedisStore) ClassWordCount(class, word string) (i int64, err error) {
-	b, err := rs.client.Hget(rs.classKey+":"+class, word)
+	c, err := rs.conn()
+	if err != nil {
+		return
+	}
+	b, err := redis.Bytes(c.Do("HGET", rs.classKey+":"+class, word))
 	if err != nil {
 		return
 	}
@@ -54,63 +77,52 @@ func (rs *RedisStore) ClassWordCount(class, word string) (i int64, err error) {
 }
 
 func (rs *RedisStore) IncrementClassWordCount(class, word string, i int64) (err error) {
-	tx, err := rs.client.Transaction()
+	c, err := rs.conn()
 	if err != nil {
 		return
 	}
-	err = tx.Multi()
-	if err != nil {
-		return
-	}
-	defer func() {
-		if err != nil {
-			tx.Discard()
-		} else {
-			_, err = tx.Exec()
-		}
-	}()
-	_, err = tx.Hincrby(rs.classKey+":"+class, word, i)
-	if err != nil {
-		return
-	}
-	_, err = tx.Hincrby(rs.sumKey, class, i)
+	c.Send("MULTI")
+	c.Send("HINCRBY", rs.classKey+":"+class, word, i)
+	c.Send("HINCRBY", rs.sumKey, class, i)
+	_, err = c.Do("EXEC")
 	return
 }
 
 func (rs *RedisStore) TotalClassWordCounts() (m map[string]int64, err error) {
-	v := make(map[string]int64)
-	if err = rs.client.Hgetall(rs.sumKey, &v); err == nil {
-		m = v
+	c, err := rs.conn()
+	if err != nil {
+		return
+	}
+	values, err := redis.Values(c.Do("HGETALL", rs.sumKey))
+	if err != nil {
+		return
+	}
+	m = make(map[string]int64)
+	for len(values) > 0 {
+		var class string
+		var count int64
+		values, err = redis.Scan(values, &class, &count)
+		if err != nil {
+			return
+		}
+		m[class] = count
 	}
 	return
 }
 
 func (rs *RedisStore) Reset() (err error) {
-	tx, err := rs.client.Transaction()
+	c, err := rs.conn()
 	if err != nil {
 		return
 	}
-	err = tx.Multi()
+	a, err := redis.Strings(c.Do("KEYS", "shield:*"))
 	if err != nil {
 		return
 	}
-	defer func() {
-		if err != nil {
-			tx.Discard()
-		} else {
-			_, err = tx.Exec()
-		}
-	}()
-	a, err := tx.Keys("shield:*")
-	if err != nil {
-		return
-	}
+	c.Send("MULTI")
 	for _, key := range a {
-		_, err2 := tx.Del(key)
-		if err2 != nil {
-			err = err2
-			return
-		}
+		c.Send("DEL", key)
 	}
+	_, err = c.Do("EXEC")
 	return
 }
