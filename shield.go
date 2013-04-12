@@ -62,18 +62,6 @@ func getKeys(m map[string]int64) []string {
 	return keys
 }
 
-func getWordProb(freqs map[string]int64, word string, totalClassWordCount int64) float64 {
-	var p float64
-	if v, ok := freqs[word]; ok {
-		p = float64(v) / float64(totalClassWordCount)
-	}
-	// We must not return 0, log(0) is not defined!
-	if p == 0 {
-		p = defaultProb
-	}
-	return p
-}
-
 func (s *shield) Score(text string) (scores map[string]float64, err error) {
 	// Get total class word counts
 	totals, err := s.store.TotalClassWordCounts()
@@ -106,7 +94,12 @@ func (s *shield) Score(text string) (scores map[string]float64, err error) {
 		// Because this classifier is not biased, we don't use prior probabilities
 		score := float64(0)
 		for _, word := range words {
-			score += math.Log(getWordProb(freqs, word, total))
+			// Compute the probability that this word belongs to that class
+			wordProb := float64(freqs[word]) / float64(total)
+			if wordProb == 0 {
+				wordProb = defaultProb
+			}
+			score += math.Log(wordProb)
 		}
 		logScores[class] = score
 	}
