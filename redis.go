@@ -120,14 +120,45 @@ func (rs *RedisStore) IncrementClassWordCounts(m map[string]map[string]int64) (e
 	if err != nil {
 		return
 	}
+	type keyPath struct {
+		class string
+		word  string
+	}
+	var wasDec bool
+	paths := make([]*keyPath, 0, len(m)*100)
 	c.Send("MULTI")
 	for class, words := range m {
-		for word, count := range words {
-			c.Send("HINCRBY", rs.classKey+":"+class, word, count)
-			c.Send("HINCRBY", rs.sumKey, class, count)
+		for word, d := range words {
+			c.Send("HINCRBY", rs.classKey+":"+class, word, d)
+			c.Send("HINCRBY", rs.sumKey, class, d)
+			paths = append(paths, &keyPath{
+				class: class,
+				word:  word,
+			})
+			if d < 0 {
+				wasDec = true
+			}
 		}
 	}
-	_, err = c.Do("EXEC")
+	values, err := redis.Values(c.Do("EXEC"))
+	if err != nil {
+		return
+	}
+
+	// If we decrement something, we have to check if we went
+	// below 0 afterwards and reset to 0 if necessary
+	if wasDec {
+		c.Send("MULTI")
+		for i := 0; i < len(values); i += 2 {
+			if v := values[i].(int64); v < 0 {
+				kp := paths[i/2]
+				d := v * -1
+				c.Send("HINCRBY", rs.classKey+":"+kp.class, kp.word, d)
+				c.Send("HINCRBY", rs.sumKey, kp.class, d)
+			}
+		}
+		_, err = c.Do("EXEC")
+	}
 	return
 }
 

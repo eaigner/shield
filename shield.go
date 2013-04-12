@@ -19,27 +19,43 @@ func New(t Tokenizer, s Store) Shield {
 }
 
 func (sh *shield) Learn(class, text string) (err error) {
+	return sh.increment(class, text, 1)
+}
+
+func (sh *shield) BulkLearn(sets []Set) (err error) {
+	return sh.bulkIncrement(sets, 1)
+}
+
+func (sh *shield) Forget(class, text string) (err error) {
+	return sh.increment(class, text, -1)
+}
+
+func (sh *shield) increment(class, text string, sign int64) (err error) {
 	if len(class) == 0 {
 		panic("invalid class")
 	}
 	if len(text) == 0 {
 		panic("invalid text")
 	}
-	return sh.BulkLearn([]Set{Set{Class: class, Text: text}})
+	return sh.bulkIncrement([]Set{Set{Class: class, Text: text}}, sign)
 }
 
-func (sh *shield) BulkLearn(sets []Set) (err error) {
+func (sh *shield) bulkIncrement(sets []Set, sign int64) (err error) {
 	if len(sets) == 0 {
 		panic("invalid data set")
 	}
 	m := make(map[string]map[string]int64)
 	for _, set := range sets {
+		tokens := sh.tokenizer.Tokenize(set.Text)
+		for k, _ := range tokens {
+			tokens[k] *= sign
+		}
 		if w, ok := m[set.Class]; ok {
-			for word, count := range sh.tokenizer.Tokenize(set.Text) {
+			for word, count := range tokens {
 				w[word] += count
 			}
 		} else {
-			m[set.Class] = sh.tokenizer.Tokenize(set.Text)
+			m[set.Class] = tokens
 		}
 	}
 	for class, _ := range m {
@@ -48,10 +64,6 @@ func (sh *shield) BulkLearn(sets []Set) (err error) {
 		}
 	}
 	return sh.store.IncrementClassWordCounts(m)
-}
-
-func (sh *shield) Forget(class, text string) (err error) {
-	return nil // TODO: implement
 }
 
 func getKeys(m map[string]int64) []string {
