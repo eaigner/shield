@@ -163,7 +163,7 @@ func (rs *RedisStore) IncrementClassWordCounts(m map[string]map[string]int64) (e
 			hmget = append(hmget, path.word)
 		}
 
-		values, err2 := redis.Values(c.Do("HMGET", hmget...))
+		values, err2 := redis.Strings(c.Do("HMGET", hmget...))
 		if err2 != nil {
 			return
 		}
@@ -171,7 +171,7 @@ func (rs *RedisStore) IncrementClassWordCounts(m map[string]map[string]int64) (e
 		c.Send("MULTI")
 		for i, v := range values {
 			path := paths[i]
-			x, err2 := strconv.ParseInt(string(v.([]uint8)), 10, 64)
+			x, err2 := strconv.ParseInt(v, 10, 64)
 			if err2 != nil {
 				panic(err2)
 			}
