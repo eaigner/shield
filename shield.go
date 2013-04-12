@@ -112,8 +112,8 @@ func (s *shield) Score(text string) (scores map[string]float64, err error) {
 	}
 
 	// Normalize the scores
-	var min = 1e11
-	var max = -1e11
+	var min = math.MaxFloat64
+	var max = -math.MaxFloat64
 	for _, score := range logScores {
 		if score > max {
 			max = score
