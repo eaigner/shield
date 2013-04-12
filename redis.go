@@ -120,44 +120,59 @@ func (rs *RedisStore) IncrementClassWordCounts(m map[string]map[string]int64) (e
 	if err != nil {
 		return
 	}
-	type keyPath struct {
+	type path struct {
 		class string
 		word  string
+		d     int64
 	}
-	var wasDec bool
-	paths := make([]*keyPath, 0, len(m)*100)
+	decrPaths := make([]*path, 0, len(m)*100)
+
+	// Apply only positive increments
 	c.Send("MULTI")
 	for class, words := range m {
 		for word, d := range words {
-			c.Send("HINCRBY", rs.classKey+":"+class, word, d)
-			c.Send("HINCRBY", rs.sumKey, class, d)
-			paths = append(paths, &keyPath{
-				class: class,
-				word:  word,
-			})
-			if d < 0 {
-				wasDec = true
+			if d > 0 {
+				c.Send("HINCRBY", rs.classKey+":"+class, word, d)
+				c.Send("HINCRBY", rs.sumKey, class, d)
+			} else {
+				decrPaths = append(decrPaths, &path{
+					class: class,
+					word:  word,
+					d:     d,
+				})
 			}
 		}
 	}
-	values, err := redis.Values(c.Do("EXEC"))
+	_, err = redis.Values(c.Do("EXEC"))
 	if err != nil {
 		return
 	}
 
-	// If we decrement something, we have to check if we went
-	// below 0 afterwards and reset to 0 if necessary
-	if wasDec {
-		c.Send("MULTI")
-		for i := 0; i < len(values); i += 2 {
-			if v := values[i].(int64); v < 0 {
-				kp := paths[i/2]
-				d := v * -1
-				c.Send("HINCRBY", rs.classKey+":"+kp.class, kp.word, d)
-				c.Send("HINCRBY", rs.sumKey, kp.class, d)
+	// If we decrement something, we have to check if we are
+	// about to drop below 0 and adjust the value accordingly.
+	//
+	// TODO: This isn't terribly performant because we have to
+	// to 2 trips per value, try to optimize some time.
+	//
+	for _, path := range decrPaths {
+		key := rs.classKey + ":" + path.class
+		i, err2 := redis.Int64(c.Do("HGET", key, path.word))
+		if err2 != nil {
+			return
+		}
+		if i != 0 {
+			d := path.d
+			if (i + d) < 0 {
+				d = i * -1
+			}
+			c.Send("MULTI")
+			c.Send("HINCRBY", key, path.word, d)
+			c.Send("HINCRBY", rs.sumKey, path.class, d)
+			_, err2 = c.Do("EXEC")
+			if err2 != nil {
+				return err2
 			}
 		}
-		_, err = c.Do("EXEC")
 	}
 	return
 }
