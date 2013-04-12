@@ -4,7 +4,7 @@ import (
 	"math"
 )
 
-const defaultProb float64 = 0.00000000001
+const defaultProb float64 = 1e-11
 
 type shield struct {
 	tokenizer Tokenizer
@@ -74,7 +74,7 @@ func getWordProb(freqs map[string]int64, word string, totalClassWordCount int64)
 	return p
 }
 
-func (s *shield) Classify(text string) (c string, err error) {
+func (s *shield) Score(text string) (scores map[string]float64, err error) {
 	// Get total class word counts
 	totals, err := s.store.TotalClassWordCounts()
 	if err != nil {
@@ -98,7 +98,7 @@ func (s *shield) Classify(text string) (c string, err error) {
 	}
 
 	// Calculate log scores for each class
-	scores := make(map[string]float64, len(classes))
+	logScores := make(map[string]float64, len(classes))
 	for _, class := range classes {
 		freqs := classFreqs[class]
 		total := totals[class]
@@ -108,18 +108,41 @@ func (s *shield) Classify(text string) (c string, err error) {
 		for _, word := range words {
 			score += math.Log(getWordProb(freqs, word, total))
 		}
-		scores[class] = score
+		logScores[class] = score
+	}
+
+	// Normalize the scores
+	var min = 1e11
+	var max = -1e11
+	for _, score := range logScores {
+		if score > max {
+			max = score
+		}
+		if score < min {
+			min = score
+		}
+	}
+	r := max - min
+	scores = make(map[string]float64, len(classes))
+	for class, score := range logScores {
+		scores[class] = (score - min) / r
+	}
+	return
+}
+
+func (s *shield) Classify(text string) (class string, err error) {
+	scores, err := s.Score(text)
+	if err != nil {
+		return
 	}
 
 	// Select class with highes prob
-	var k string
-	var i float64
-	for k2, v2 := range scores {
-		if i == 0 || v2 > i {
-			k, i = k2, v2
+	var score float64
+	for k, v := range scores {
+		if v > score {
+			class, score = k, v
 		}
 	}
-	c = k
 	return
 }
 
