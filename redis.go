@@ -3,6 +3,7 @@ package shield
 import (
 	"github.com/garyburd/redigo/redis"
 	"log"
+	"strconv"
 )
 
 type RedisStore struct {
@@ -120,12 +121,11 @@ func (rs *RedisStore) IncrementClassWordCounts(m map[string]map[string]int64) (e
 	if err != nil {
 		return
 	}
-	type path struct {
-		class string
-		word  string
-		d     int64
+	type tuple struct {
+		word string
+		d    int64
 	}
-	decrPaths := make([]*path, 0, len(m)*100)
+	decrTuples := make(map[string][]*tuple, len(m))
 
 	// Apply only positive increments
 	c.Send("MULTI")
@@ -135,10 +135,9 @@ func (rs *RedisStore) IncrementClassWordCounts(m map[string]map[string]int64) (e
 				c.Send("HINCRBY", rs.classKey+":"+class, word, d)
 				c.Send("HINCRBY", rs.sumKey, class, d)
 			} else {
-				decrPaths = append(decrPaths, &path{
-					class: class,
-					word:  word,
-					d:     d,
+				decrTuples[class] = append(decrTuples[class], &tuple{
+					word: word,
+					d:    d,
 				})
 			}
 		}
@@ -154,24 +153,40 @@ func (rs *RedisStore) IncrementClassWordCounts(m map[string]map[string]int64) (e
 	// TODO: This isn't terribly performant because we have to
 	// to 2 trips per value, try to optimize some time.
 	//
-	for _, path := range decrPaths {
-		key := rs.classKey + ":" + path.class
-		i, err2 := redis.Int64(c.Do("HGET", key, path.word))
+	for class, paths := range decrTuples {
+		key := rs.classKey + ":" + class
+
+		// Build HMGET params
+		hmget := make([]interface{}, 0, len(paths))
+		hmget = append(hmget, key)
+		for _, path := range paths {
+			hmget = append(hmget, path.word)
+		}
+
+		values, err2 := redis.Values(c.Do("HMGET", hmget...))
 		if err2 != nil {
 			return
 		}
-		if i != 0 {
-			d := path.d
-			if (i + d) < 0 {
-				d = i * -1
-			}
-			c.Send("MULTI")
-			c.Send("HINCRBY", key, path.word, d)
-			c.Send("HINCRBY", rs.sumKey, path.class, d)
-			_, err2 = c.Do("EXEC")
+
+		c.Send("MULTI")
+		for i, v := range values {
+			path := paths[i]
+			x, err2 := strconv.ParseInt(string(v.([]uint8)), 10, 64)
 			if err2 != nil {
-				return err2
+				panic(err2)
 			}
+			if x != 0 {
+				d := path.d
+				if (x + d) < 0 {
+					d = x * -1
+				}
+				c.Send("HINCRBY", key, path.word, d)
+				c.Send("HINCRBY", rs.sumKey, class, d)
+			}
+		}
+		_, err2 = c.Do("EXEC")
+		if err2 != nil {
+			return err2
 		}
 	}
 	return

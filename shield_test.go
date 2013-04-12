@@ -94,10 +94,9 @@ func TestDecrement(t *testing.T) {
 	sh.Learn("a", "sunshine")
 	sh.Learn("a", "tree")
 	sh.Learn("a", "water")
+	sh.Learn("b", "iamb!")
 
-	sh.Forget("a", "hello")
-	sh.Forget("a", "tree")
-
+	sh.Forget("a", "hello tree")
 	sh.Forget("a", "hello")
 
 	s := sh.(*shield)
@@ -110,8 +109,18 @@ func TestDecrement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := fmt.Sprintf("%v", m)
-	if r != "map[hello:0 sunshine:1 tree:0 water:1]" {
+	if r := fmt.Sprintf("%v", m); r != "map[hello:0 sunshine:1 tree:0 water:1]" {
+		t.Fatal(r)
+	}
+
+	m2, err := s.store.ClassWordCounts("b", []string{
+		"hello",
+		"iamb!",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := fmt.Sprintf("%v", m2); r != "map[hello:0 iamb!:0]" {
 		t.Fatal(r)
 	}
 
@@ -119,10 +128,13 @@ func TestDecrement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if x := len(wc); x != 1 {
+	if x := len(wc); x != 2 {
 		t.Fatal(x)
 	}
 	if x := wc["a"]; x != 2 {
+		t.Fatal(x)
+	}
+	if x := wc["b"]; x != 1 {
 		t.Fatal(x)
 	}
 }
