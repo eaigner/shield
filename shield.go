@@ -54,53 +54,65 @@ func (sh *shield) Forget(class, text string) (err error) {
 	return nil // TODO: implement
 }
 
-func (sh *shield) Classify(text string) (c string, err error) {
-	totalCounts, err := sh.store.TotalClassWordCounts()
+func getKeys(m map[string]int64) []string {
+	keys := make([]string, 0, len(m))
+	for k, _ := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+func getWordProb(freqs map[string]int64, word string, totalClassWordCount int64) float64 {
+	var p float64
+	if v, ok := freqs[word]; ok {
+		p = float64(v) / float64(totalClassWordCount)
+	}
+	// We must not return 0, log(0) is not defined!
+	if p == 0 {
+		p = defaultProb
+	}
+	return p
+}
+
+func (s *shield) Classify(text string) (c string, err error) {
+	// Get total class word counts
+	totals, err := s.store.TotalClassWordCounts()
 	if err != nil {
 		return
 	}
+	classes := getKeys(totals)
 
-	// Compute priors
-	var sum int64
-	for _, v := range totalCounts {
-		sum += v
-	}
-	priors := make(map[string]float64)
-	classes := make([]string, 0, len(totalCounts))
-	for class, count := range totalCounts {
-		classes = append(classes, class)
-		priors[class] = float64(count) / float64(sum)
-	}
+	// Tokenize text
+	wordFreqs := s.tokenizer.Tokenize(text)
+	words := getKeys(wordFreqs)
 
-	// Get class word counts in bulk
-	tokens := sh.tokenizer.Tokenize(text)
-	words := make([]string, 0, len(tokens))
-	for word, _ := range tokens {
-		words = append(words, word)
-	}
-
-	classWordCounts := make(map[string]map[string]int64)
+	// Get word frequencies for each class
+	classFreqs := make(map[string]map[string]int64)
 	for _, class := range classes {
-		wc, err2 := sh.store.ClassWordCounts(class, words)
+		freqs, err2 := s.store.ClassWordCounts(class, words)
 		if err2 != nil {
 			err = err2
 			return
 		}
-		classWordCounts[class] = wc
+		classFreqs[class] = freqs
 	}
 
-	// Compute score
-	scores := make(map[string]float64)
-	for class, v := range priors {
-		score := math.Log(v)
-		for _, count := range classWordCounts[class] {
-			score += math.Log((float64(count) + defaultProb) / float64(totalCounts[class]))
+	// Calculate log scores for each class
+	scores := make(map[string]float64, len(classes))
+	for _, class := range classes {
+		freqs := classFreqs[class]
+		total := totals[class]
+
+		// Because this classifier is not biased, we don't use prior probabilities
+		score := float64(0)
+		for _, word := range words {
+			score += math.Log(getWordProb(freqs, word, total))
 		}
 		scores[class] = score
 	}
 
 	// Select class with highes prob
-	var k string = ""
+	var k string
 	var i float64
 	for k2, v2 := range scores {
 		if i == 0 || v2 > i {
@@ -109,10 +121,6 @@ func (sh *shield) Classify(text string) (c string, err error) {
 	}
 	c = k
 	return
-}
-
-func (sh *shield) BulkClassify(texts []string) (c []string, err error) {
-	panic("TODO: impl!")
 }
 
 func (sh *shield) Reset() error {

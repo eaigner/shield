@@ -14,7 +14,6 @@ type Shield interface {
 	BulkLearn(sets []Set) (err error)
 	Forget(class, text string) (err error)
 	Classify(text string) (c string, err error)
-	BulkClassify(texts []string) (c []string, err error)
 	Reset() error
 }
 
