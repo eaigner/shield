@@ -130,7 +130,11 @@ func (s *shield) Score(text string) (scores map[string]float64, err error) {
 	r := max - min
 	scores = make(map[string]float64, len(classes))
 	for class, score := range logScores {
-		scores[class] = (score - min) / r
+		if r == 0 {
+			scores[class] = 1
+		} else {
+			scores[class] = (score - min) / r
+		}
 	}
 	return
 }
