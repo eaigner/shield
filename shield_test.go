@@ -5,9 +5,25 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 )
+
+var (
+	logger = log.New(os.Stderr, "", log.LstdFlags)
+)
+
+func newShield(store Store) Shield {
+	tokenizer := NewEnglishTokenizer()
+
+	sh := New(tokenizer, store)
+	err := sh.Reset()
+	if err != nil {
+		panic(err)
+	}
+	return sh
+}
 
 func readDataSet(dataFile, labelFile string, t *testing.T) []string {
 	d, err := ioutil.ReadFile("testdata/" + dataFile)
@@ -34,21 +50,7 @@ func readDataSet(dataFile, labelFile string, t *testing.T) []string {
 	return a
 }
 
-func newShield() Shield {
-	logger := log.New(os.Stderr, "", log.LstdFlags)
-	store := NewRedisStore("127.0.0.1:6379", "", logger, "redis")
-	tokenizer := NewEnglishTokenizer()
-
-	sh := New(tokenizer, store)
-	err := sh.Reset()
-	if err != nil {
-		panic(err)
-	}
-	return sh
-}
-
-func TestLearn(t *testing.T) {
-	sh := newShield()
+func testLearn(t *testing.T, sh Shield) {
 	testData := readDataSet("testdata.txt", "testlabels.txt", t)
 	trainData := readDataSet("traindata.txt", "trainlabels.txt", t)
 
@@ -88,8 +90,7 @@ func TestLearn(t *testing.T) {
 	}
 }
 
-func TestDecrement(t *testing.T) {
-	sh := newShield()
+func testDecrement(t *testing.T, sh Shield) {
 	sh.Learn("a", "hello")
 	sh.Learn("a", "sunshine")
 	sh.Learn("a", "tree")
@@ -109,8 +110,13 @@ func TestDecrement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r := fmt.Sprintf("%v", m); r != "map[hello:0 sunshine:1 tree:0 water:1]" {
-		t.Fatal(r)
+	if !reflect.DeepEqual(m, map[string]int64{
+		"hello":    0,
+		"sunshine": 1,
+		"tree":     0,
+		"water":    1,
+	}) {
+		t.Fatal(fmt.Sprintf("%v", m))
 	}
 
 	m2, err := s.store.ClassWordCounts("b", []string{
@@ -120,8 +126,12 @@ func TestDecrement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r := fmt.Sprintf("%v", m2); r != "map[hello:0 iamb!:0]" {
-		t.Fatal(r)
+
+	if !reflect.DeepEqual(m2, map[string]int64{
+		"iamb!": 0,
+		"hello": 0,
+	}) {
+		t.Fatal(fmt.Sprintf("%v", m2))
 	}
 
 	wc, err := s.store.TotalClassWordCounts()
