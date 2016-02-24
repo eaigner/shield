@@ -10,6 +10,7 @@ type RedisStore struct {
 	redis      redis.Conn
 	addr       string
 	password   string
+	db         string
 	sumKey     string
 	classKey   string
 	classesKey string
@@ -17,10 +18,11 @@ type RedisStore struct {
 	prefix     string
 }
 
-func NewRedisStore(addr, password string, logger *log.Logger, prefix string) Store {
+func NewRedisStore(addr, password, db string, logger *log.Logger, prefix string) Store {
 	return &RedisStore{
 		addr:       addr,
 		password:   password,
+		db:         db,
 		sumKey:     "shield:sum",
 		classKey:   "shield:class",
 		classesKey: "shield:classes",
@@ -42,6 +44,13 @@ func (rs *RedisStore) conn() (conn redis.Conn, err error) {
 			_, authErr := redis.String(c.Do("AUTH", rs.password))
 			if authErr != nil {
 				err = authErr
+				return
+			}
+		}
+		if rs.db != "" {
+			_, selDbErr := redis.String(c.Do("SELECT", rs.db))
+			if selDbErr != nil {
+				err = selDbErr
 				return
 			}
 		}
@@ -132,8 +141,15 @@ func (rs *RedisStore) IncrementClassWordCounts(m map[string]map[string]int64) (e
 	for class, words := range m {
 		for word, d := range words {
 			if d > 0 {
-				c.Send("HINCRBY", rs.classKey+":"+class, word, d)
-				c.Send("HINCRBY", rs.sumKey, class, d)
+				/*****  SITANAN PATCH  starts */
+				/* Store only when frequency is more than 1. ( n=1) */
+				if d > 1 {
+					c.Send("HINCRBY", rs.classKey+":"+class, word, d)
+					c.Send("HINCRBY", rs.sumKey, class, d)
+				}
+				/*****  SITANAN PATCH END */
+				//c.Send("HINCRBY", rs.classKey+":"+class, word, d)
+				//c.Send("HINCRBY", rs.sumKey, class, d)
 			} else {
 				decrTuples[class] = append(decrTuples[class], &tuple{
 					word: word,
