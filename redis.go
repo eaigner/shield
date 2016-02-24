@@ -141,15 +141,8 @@ func (rs *RedisStore) IncrementClassWordCounts(m map[string]map[string]int64) (e
 	for class, words := range m {
 		for word, d := range words {
 			if d > 0 {
-				/*****  SITANAN PATCH  starts */
-				/* Store only when frequency is more than 1. ( n=1) */
-				if d > 1 {
-					c.Send("HINCRBY", rs.classKey+":"+class, word, d)
-					c.Send("HINCRBY", rs.sumKey, class, d)
-				}
-				/*****  SITANAN PATCH END */
-				//c.Send("HINCRBY", rs.classKey+":"+class, word, d)
-				//c.Send("HINCRBY", rs.sumKey, class, d)
+				c.Send("HINCRBY", rs.classKey+":"+class, word, d)
+				c.Send("HINCRBY", rs.sumKey, class, d)
 			} else {
 				decrTuples[class] = append(decrTuples[class], &tuple{
 					word: word,
