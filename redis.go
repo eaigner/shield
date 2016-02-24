@@ -50,6 +50,19 @@ func (rs *RedisStore) conn() (conn redis.Conn, err error) {
 	return rs.redis, nil
 }
 
+func (rs *RedisStore) TestConnection() {
+	if c, err := rs.conn(); err == nil {
+		if _, err := c.Do("PING"); err == nil {
+			return
+		}
+	}
+
+	log.Println("Resetting redis connection...")
+
+	rs.redis = nil
+	rs.conn()
+}
+
 func (rs *RedisStore) Classes() (a []string, err error) {
 	c, err := rs.conn()
 	if err != nil {
