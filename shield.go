@@ -96,25 +96,62 @@ func (s *shield) Score(text string) (scores map[string]float64, err error) {
 		}
 		classFreqs[class] = freqs
 	}
+	/*
+		// Calculate log scores for each class
+		logScores := make(map[string]float64, len(classes))
+
+		for _, class := range classes {
+			freqs := classFreqs[class]
+			total := totals[class]
+
+			// Because this classifier is not biased, we don't use prior probabilities
+			score := float64(0)
+			for _, word := range words {
+				// Compute the probability that this word belongs to that class
+				wordProb := float64(freqs[word]) / float64(total)
+				if wordProb == 0 {
+					wordProb = defaultProb
+				}
+				score += math.Log(wordProb)
+			}
+			logScores[class] = score
+		}
+	*/
+	/*****************************************************/
+	//** SITNAN modification to handle zero prob **/
 
 	// Calculate log scores for each class
 	logScores := make(map[string]float64, len(classes))
+
+	hasData := false
 	for _, class := range classes {
 		freqs := classFreqs[class]
 		total := totals[class]
 
 		// Because this classifier is not biased, we don't use prior probabilities
 		score := float64(0)
+
 		for _, word := range words {
 			// Compute the probability that this word belongs to that class
 			wordProb := float64(freqs[word]) / float64(total)
 			if wordProb == 0 {
 				wordProb = defaultProb
+			} else {
+				hasData = true
 			}
 			score += math.Log(wordProb)
+
 		}
 		logScores[class] = score
+
 	}
+
+	scores = make(map[string]float64, len(classes))
+	if !hasData {
+		scores["unknown"] = 1
+		return
+	}
+	/*****************************************************/
 
 	// Normalize the scores
 	var min = math.MaxFloat64
