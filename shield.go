@@ -1,6 +1,7 @@
 package shield
 
 import (
+	"log"
 	"math"
 )
 
@@ -58,11 +59,20 @@ func (sh *shield) bulkIncrement(sets []Set, sign int64) (err error) {
 			m[set.Class] = tokens
 		}
 	}
-	for class, _ := range m {
+	for class, words := range m {
+
+		// Sitnan patch: Do not consider words if count is less than 2
+		for word, d := range words {
+			if d < 2 {
+				delete(m[class], word)
+			}
+		}
 		if err = sh.store.AddClass(class); err != nil {
+			log.Println(err)
 			return
 		}
 	}
+	log.Println("Total word with freq sent to Redis is: ", len(m))
 	return sh.store.IncrementClassWordCounts(m)
 }
 
@@ -84,6 +94,9 @@ func (s *shield) Score(text string) (scores map[string]float64, err error) {
 
 	// Tokenize text
 	wordFreqs := s.tokenizer.Tokenize(text)
+	if len(wordFreqs) < 1 {
+		return
+	}
 	words := getKeys(wordFreqs)
 
 	// Get word frequencies for each class
@@ -179,6 +192,7 @@ func (s *shield) Score(text string) (scores map[string]float64, err error) {
 func (s *shield) Classify(text string) (class string, err error) {
 	scores, err := s.Score(text)
 	if err != nil {
+		//log.Println(err)
 		return
 	}
 
