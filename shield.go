@@ -85,19 +85,20 @@ func getKeys(m map[string]int64) []string {
 }
 
 func (s *shield) Score(text string) (scores map[string]float64, err error) {
+
+	// Tokenize text
+	wordFreqs := s.tokenizer.Tokenize(text)
+	if len(wordFreqs) < 2 {
+		return
+	}
+	words := getKeys(wordFreqs)
+
 	// Get total class word counts
 	totals, err := s.store.TotalClassWordCounts()
 	if err != nil {
 		return
 	}
 	classes := getKeys(totals)
-
-	// Tokenize text
-	wordFreqs := s.tokenizer.Tokenize(text)
-	if len(wordFreqs) < 1 {
-		return
-	}
-	words := getKeys(wordFreqs)
 
 	// Get word frequencies for each class
 	classFreqs := make(map[string]map[string]int64)
