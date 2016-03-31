@@ -10,6 +10,7 @@ type RedisStore struct {
 	redis      redis.Conn
 	addr       string
 	password   string
+	db         string
 	sumKey     string
 	classKey   string
 	classesKey string
@@ -17,10 +18,11 @@ type RedisStore struct {
 	prefix     string
 }
 
-func NewRedisStore(addr, password string, logger *log.Logger, prefix string) Store {
+func NewRedisStore(addr, password, db string, logger *log.Logger, prefix string) Store {
 	return &RedisStore{
 		addr:       addr,
 		password:   password,
+		db:         db,
 		sumKey:     "shield:sum",
 		classKey:   "shield:class",
 		classesKey: "shield:classes",
@@ -42,6 +44,13 @@ func (rs *RedisStore) conn() (conn redis.Conn, err error) {
 			_, authErr := redis.String(c.Do("AUTH", rs.password))
 			if authErr != nil {
 				err = authErr
+				return
+			}
+		}
+		if rs.db != "" {
+			_, selDbErr := redis.String(c.Do("SELECT", rs.db))
+			if selDbErr != nil {
+				err = selDbErr
 				return
 			}
 		}

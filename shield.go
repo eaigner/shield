@@ -1,6 +1,7 @@
 package shield
 
 import (
+	"log"
 	"math"
 )
 
@@ -58,11 +59,20 @@ func (sh *shield) bulkIncrement(sets []Set, sign int64) (err error) {
 			m[set.Class] = tokens
 		}
 	}
-	for class, _ := range m {
+	for class, words := range m {
+
+		// Sitnan patch: Do not consider words if count is less than 2
+		for word, d := range words {
+			if d < 2 {
+				delete(m[class], word)
+			}
+		}
 		if err = sh.store.AddClass(class); err != nil {
+			log.Println(err)
 			return
 		}
 	}
+	log.Println("Total word with freq sent to Redis is: ", len(m))
 	return sh.store.IncrementClassWordCounts(m)
 }
 
@@ -75,16 +85,20 @@ func getKeys(m map[string]int64) []string {
 }
 
 func (s *shield) Score(text string) (scores map[string]float64, err error) {
+
+	// Tokenize text
+	wordFreqs := s.tokenizer.Tokenize(text)
+	if len(wordFreqs) < 2 {
+		return
+	}
+	words := getKeys(wordFreqs)
+
 	// Get total class word counts
 	totals, err := s.store.TotalClassWordCounts()
 	if err != nil {
 		return
 	}
 	classes := getKeys(totals)
-
-	// Tokenize text
-	wordFreqs := s.tokenizer.Tokenize(text)
-	words := getKeys(wordFreqs)
 
 	// Get word frequencies for each class
 	classFreqs := make(map[string]map[string]int64)
@@ -96,25 +110,62 @@ func (s *shield) Score(text string) (scores map[string]float64, err error) {
 		}
 		classFreqs[class] = freqs
 	}
+	/*
+		// Calculate log scores for each class
+		logScores := make(map[string]float64, len(classes))
+
+		for _, class := range classes {
+			freqs := classFreqs[class]
+			total := totals[class]
+
+			// Because this classifier is not biased, we don't use prior probabilities
+			score := float64(0)
+			for _, word := range words {
+				// Compute the probability that this word belongs to that class
+				wordProb := float64(freqs[word]) / float64(total)
+				if wordProb == 0 {
+					wordProb = defaultProb
+				}
+				score += math.Log(wordProb)
+			}
+			logScores[class] = score
+		}
+	*/
+	/*****************************************************/
+	//** SITNAN modification to handle zero prob **/
 
 	// Calculate log scores for each class
 	logScores := make(map[string]float64, len(classes))
+
+	hasData := false
 	for _, class := range classes {
 		freqs := classFreqs[class]
 		total := totals[class]
 
 		// Because this classifier is not biased, we don't use prior probabilities
 		score := float64(0)
+
 		for _, word := range words {
 			// Compute the probability that this word belongs to that class
 			wordProb := float64(freqs[word]) / float64(total)
 			if wordProb == 0 {
 				wordProb = defaultProb
+			} else {
+				hasData = true
 			}
 			score += math.Log(wordProb)
+
 		}
 		logScores[class] = score
+
 	}
+
+	scores = make(map[string]float64, len(classes))
+	if !hasData {
+		scores["unknown"] = 1
+		return
+	}
+	/*****************************************************/
 
 	// Normalize the scores
 	var min = math.MaxFloat64
@@ -142,6 +193,7 @@ func (s *shield) Score(text string) (scores map[string]float64, err error) {
 func (s *shield) Classify(text string) (class string, err error) {
 	scores, err := s.Score(text)
 	if err != nil {
+		//log.Println(err)
 		return
 	}
 
