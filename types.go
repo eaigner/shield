@@ -27,6 +27,9 @@ type Shield interface {
 
 	// Reset clears the storage
 	Reset() error
+
+	// Checks and reestablishes connection to the data store
+	TestConnection()
 }
 
 type Store interface {
@@ -36,4 +39,5 @@ type Store interface {
 	IncrementClassWordCounts(m map[string]map[string]int64) error
 	TotalClassWordCounts() (map[string]int64, error)
 	Reset() error
+	TestConnection()
 }

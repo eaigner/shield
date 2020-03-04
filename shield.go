@@ -158,3 +158,7 @@ func (s *shield) Classify(text string) (class string, err error) {
 func (sh *shield) Reset() error {
 	return sh.store.Reset()
 }
+
+func (sh *shield) TestConnection() {
+	sh.store.TestConnection()
+}
